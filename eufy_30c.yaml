@@ -1,0 +1,149 @@
+esphome:
+  name: eufy-30c
+
+esp8266:
+  board: esp01_1m
+
+<<: !include ./secrets.yaml
+
+captive_portal:
+
+api:
+
+logger:
+  level: DEBUG
+  baud_rate: 0  # disable uart logger as tuya needs that
+
+uart:
+  rx_pin: GPIO13
+  tx_pin: GPIO15
+  baud_rate: 115200
+
+time:
+  - platform: homeassistant
+    id: homeassistant_time
+
+tuya:
+  id: tuya_tuya
+  time_id: homeassistant_time
+
+# Datapoint reference:
+# 2:   switch  - start cleaning
+# 3:   enum    - directional move (0=fwd, 1=back, 2=left, 3=right)
+# 5:   enum    - clean mode (0=auto, 1=single room, 2=spot, 3=edge, 4=idle)
+# 15:  enum    - status (0=cleaning, 1=idle, 2=sleeping, 3=charging, 4=charged)
+# 101: switch  - go home
+# 102: enum    - suction (0=standard, 1=boostIQ, 2=max)
+# 103: switch  - locate
+# 104: int     - battery %
+# 106: enum    - error code (0=none, 3=cliff, 5=left wheel stuck, 6=left brush stuck)
+
+sensor:
+  - platform: tuya
+    name: "Eufy 30c Battery"
+    sensor_datapoint: 104
+    unit_of_measurement: "%"
+    device_class: battery
+
+  - platform: tuya
+    name: "Eufy 30c Status Code"
+    id: eufy_status
+    internal: true
+    sensor_datapoint: 15
+
+  - platform: tuya
+    name: "Eufy 30c Error Code"
+    id: eufy_error
+    internal: true
+    sensor_datapoint: 106
+
+switch:
+  - platform: tuya
+    name: "Eufy 30c Clean"
+    switch_datapoint: 2
+
+  - platform: tuya
+    name: "Eufy 30c Go Home"
+    switch_datapoint: 101
+
+  - platform: tuya
+    name: "Eufy 30c Locate"
+    switch_datapoint: 103
+
+select:
+  - platform: tuya
+    name: "Eufy 30c Cleaning Mode"
+    enum_datapoint: 5
+    optimistic: true
+    options:
+      0: Auto
+      1: Single Room
+      2: Spot
+      3: Edge
+      4: Idle
+
+  - platform: tuya
+    name: "Eufy 30c Suction Power"
+    enum_datapoint: 102
+    optimistic: true
+    options:
+      0: Standard
+      1: BoostIQ
+      2: Max
+
+  - platform: tuya
+    name: "Eufy 30c Direction"
+    id: eufy_direction
+    enum_datapoint: 3
+    optimistic: true
+    options:
+      0: Forward
+      1: Back
+      2: Left
+      3: Right
+
+button:
+  - platform: template
+    name: "Eufy 30c Move Forward"
+    on_press:
+      - select.set:
+          id: eufy_direction
+          option: Forward
+
+  - platform: template
+    name: "Eufy 30c Move Back"
+    on_press:
+      - select.set:
+          id: eufy_direction
+          option: Back
+
+  - platform: template
+    name: "Eufy 30c Move Left"
+    on_press:
+      - select.set:
+          id: eufy_direction
+          option: Left
+
+  - platform: template
+    name: "Eufy 30c Move Right"
+    on_press:
+      - select.set:
+          id: eufy_direction
+          option: Right
+
+text_sensor:
+  - platform: template
+    name: "Eufy 30c Robot Status"
+    update_interval: 5s
+    lambda: |-
+      if (id(eufy_error).state > 0) {
+        return {"Error - check robot"};
+      }
+      switch ((int) id(eufy_status).state) {
+        case 0: return {"Cleaning"};
+        case 1: return {"Idle"};
+        case 2: return {"Sleeping"};
+        case 3: return {"Charging"};
+        case 4: return {"Fully Charged"};
+        default: return {"Unknown"};
+      }
